@@ -9,66 +9,29 @@
   <meta name="theme-color" content="#E86900" />
   <title>FieldOps – Desert Link</title>
   <link rel="manifest" href="manifest.json" />
-  <!-- iOS home screen icons (generated inline as SVG → PNG via canvas) -->
-  <link rel="apple-touch-icon" href="icon-192.png" />
   <style>
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body, #root {
-      margin: 0; padding: 0; height: 100%;
-      background: #0A0F1A;
-      font-family: -apple-system, 'Inter', system-ui, sans-serif;
-      overscroll-behavior: none;
-    }
-    /* Safe area insets for iPhone notch/home bar */
-    #root {
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-    /* Smooth scrolling */
-    .scroll-view { -webkit-overflow-scrolling: touch; overflow-y: auto; }
-    /* Remove iOS input styling */
-    input, select, textarea, button {
-      -webkit-appearance: none;
-      font-family: inherit;
-    }
-    /* Prevent zoom on input focus */
-    input, select, textarea { font-size: 16px !important; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; background: #0A0F1A; font-family: -apple-system, 'Inter', system-ui, sans-serif; overscroll-behavior: none; }
+    #root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    input, select, textarea, button { -webkit-appearance: none; font-family: inherit; font-size: 16px; }
+    .scroll-area { -webkit-overflow-scrolling: touch; }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#E86900;font-size:18px;font-weight:800">Loading…</div></div>
 
-  <!-- React + Babel via CDN (no build step) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
 
-// ── Storage ───────────────────────────────────────────────────────────────────
-const STORE_KEY = "desertlink_fieldops_v2";
-function loadStore() {
-  try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
-function saveStore(data) {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch(e) { console.warn("Storage full", e); }
-}
-function freshStore() {
-  return {
-    workOrders: [],
-    nextId: 1022,
-    settings: {
-      companyName: "Desert Link Technologies LLC",
-      companyAddress: "11733 W. Chase Ln, Avondale, AZ 85323",
-      companyPhone: "",
-      companyEmail: "",
-      invoiceSeq: 21,
-      techs: ["Uriel", "Marcus", "Dani", "Kyle"],
-      workTypes: ["Structured Cabling", "Network Infrastructure", "IP Camera / CCTV", "Access Control", "Managed IT Services", "Rack & Stack", "Fiber Optic", "Wireless AP Deployment", "Server Room Build-Out", "Alarm System"],
-    },
-  };
-}
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const SUPA_URL = "https://dbvccbhfzokgztrmdoyg.supabase.co";
+const SUPA_KEY = "sb_publishable_rJz3QFJgQI6m9a89MUXEdA_jmpW1N1W";
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt$ = (n) => "$" + parseFloat(n || 0).toFixed(2);
@@ -83,20 +46,19 @@ const STATUS_COLORS = {
   "Completed":   { bg: "#1A1A2E", fg: "#A78BFA" },
   "Invoiced":    { bg: "#0F2A1A", fg: "#34D399" },
 };
-function Badge({ status }) {
-  const c = STATUS_COLORS[status] || { bg: "#1E1E1E", fg: "#aaa" };
-  return React.createElement("span", { style: { background: c.bg, color: c.fg, borderRadius: 6, padding: "2px 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" } }, status);
-}
 
 // ── UI Atoms ──────────────────────────────────────────────────────────────────
 const INP = { width: "100%", padding: "12px 13px", background: "#0D1626", border: "1px solid #1E2D45", borderRadius: 10, color: "#E2E8F0", fontSize: 16, outline: "none", boxSizing: "border-box" };
 
+function Badge({ status }) {
+  const c = STATUS_COLORS[status] || { bg: "#1E1E1E", fg: "#aaa" };
+  return <span style={{ background: c.bg, color: c.fg, borderRadius: 6, padding: "2px 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{status}</span>;
+}
 function F({ label, value, onChange, placeholder = "", type = "text" }) {
   return (
     <div style={{ marginBottom: 12 }}>
       {label && <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7E96", marginBottom: 5, letterSpacing: "0.06em" }}>{label.toUpperCase()}</div>}
-      <input type={type} value={value || ""} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={INP}
-        inputMode={type === "number" ? "decimal" : type === "tel" ? "tel" : type === "email" ? "email" : "text"} />
+      <input type={type} value={value || ""} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={INP} autoCapitalize={type === "email" ? "none" : "sentences"} autoCorrect="off" />
     </div>
   );
 }
@@ -130,10 +92,19 @@ function Btn({ onClick, children, color = "#1A6FC4", disabled = false, style = {
 function Ghost({ onClick, children }) {
   return <button onClick={onClick} style={{ width: "100%", padding: 12, background: "#1A2333", border: "1px solid #1E2D45", borderRadius: 10, color: "#7EBCF5", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10 }}>{children}</button>;
 }
+function Spinner({ msg = "Loading…" }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", gap: 16 }}>
+      <div style={{ width: 36, height: 36, border: "3px solid #1E2D45", borderTop: "3px solid #E86900", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+      <div style={{ fontSize: 13, color: "#6B7E96", fontWeight: 600 }}>{msg}</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
 
 // ── Invoice HTML ──────────────────────────────────────────────────────────────
 function buildInvoiceHTML(wo, settings, invNum) {
-  const items = wo.lineItems || [];
+  const items = wo.line_items || [];
   const sub = items.reduce((s, i) => s + parseFloat(i.qty) * parseFloat(i.rate), 0);
   const invDate = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
   const dueDate = new Date(Date.now() + 30 * 86400000).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
@@ -142,148 +113,270 @@ function buildInvoiceHTML(wo, settings, invNum) {
     '<td style="padding:10px 16px;font-size:13px">' + item.desc + '</td>' +
     '<td style="padding:10px 16px;text-align:center;font-size:13px">' + item.qty + '</td>' +
     '<td style="padding:10px 16px;text-align:right;font-size:13px">$' + parseFloat(item.rate).toFixed(2) + '</td>' +
-    '<td style="padding:10px 16px;text-align:right;font-size:13px;font-weight:600;background:#E8690018">$' + (parseFloat(item.qty) * parseFloat(item.rate)).toFixed(2) + '</td>' +
-    '</tr>'
+    '<td style="padding:10px 16px;text-align:right;font-size:13px;font-weight:600;background:#E8690018">$' + (parseFloat(item.qty) * parseFloat(item.rate)).toFixed(2) + '</td></tr>'
   ).join("");
-
   return '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#222;max-width:700px;margin:0 auto;padding:0">' +
-  '<div style="background:#1a1a1a;height:12px"></div>' +
-  '<div style="padding:32px 40px">' +
-  '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">' +
-    '<div>' +
-      '<div style="font-size:26px;font-weight:900;color:#1a1a1a">DESERT LINK</div>' +
-      '<div style="font-size:11px;font-weight:700;color:#888;letter-spacing:3px">TECHNOLOGIES</div>' +
-      (settings.companyAddress ? '<div style="font-size:11px;color:#888;margin-top:8px">' + settings.companyAddress + '</div>' : '') +
-      (settings.companyPhone ? '<div style="font-size:11px;color:#888">' + settings.companyPhone + '</div>' : '') +
-      (settings.companyEmail ? '<div style="font-size:11px;color:#888">' + settings.companyEmail + '</div>' : '') +
-    '</div>' +
-    '<div style="text-align:right">' +
-      '<div style="font-size:30px;font-weight:900;letter-spacing:2px">INVOICE</div>' +
-      '<div style="width:60px;height:4px;background:#E86900;margin:6px 0 0 auto"></div>' +
-    '</div>' +
-  '</div>' +
-  '<div style="display:flex;gap:40px;margin-bottom:24px">' +
-    '<div style="flex:1">' +
-      '<div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:5px">REMITTANCE ADDRESS</div>' +
-      '<div style="font-weight:700;font-size:13px">Desert Link Technologies LLC</div>' +
-      (settings.companyAddress ? '<div style="font-size:12px;color:#555">' + settings.companyAddress + '</div>' : '') +
-    '</div>' +
-    '<div style="flex:1">' +
-      '<div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:5px">CUSTOMER</div>' +
-      '<div style="font-weight:700;font-size:13px">' + (wo.clientName || "") + '</div>' +
-      (wo.clientAddress ? '<div style="font-size:12px;color:#555">' + wo.clientAddress + '</div>' : '') +
-    '</div>' +
-  '</div>' +
-  (wo.location ? '<div style="margin-bottom:20px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:5px">SERVICE ADDRESS</div><div style="font-size:13px">' + wo.location + '</div></div>' : '') +
-  '<div style="display:flex;gap:40px;margin-bottom:24px">' +
-    '<div style="flex:1">' +
-      (wo.customerPO ? '<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">CUSTOMER PO</div><div style="font-weight:700;font-size:13px">' + wo.customerPO + '</div></div>' : '') +
-      (wo.project ? '<div><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">PROJECT</div><div style="font-weight:700;font-size:13px">' + wo.project + '</div></div>' : '') +
-    '</div>' +
-    '<div style="flex:1">' +
-      '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">INVOICE#</div><div style="font-weight:700;font-size:13px">' + invNum + '</div></div>' +
-      '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">INVOICE DATE</div><div style="font-size:13px">' + invDate + '</div></div>' +
-      '<div><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">INVOICE DUE DATE</div><div style="font-size:13px">' + dueDate + '</div></div>' +
-    '</div>' +
-  '</div>' +
-  '<table style="width:100%;border-collapse:collapse;margin-bottom:0">' +
-    '<thead><tr style="background:#2a2a2a;color:#fff">' +
-      '<th style="padding:10px 16px;text-align:left;font-size:12px">Description</th>' +
-      '<th style="padding:10px 16px;text-align:center;font-size:12px">Qty</th>' +
-      '<th style="padding:10px 16px;text-align:right;font-size:12px">Price</th>' +
-      '<th style="padding:10px 16px;text-align:right;font-size:12px;background:#E86900">Total</th>' +
-    '</tr></thead>' +
-    '<tbody>' + (rows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#aaa">No line items</td></tr>') + '</tbody>' +
-  '</table>' +
-  '<div style="display:flex;justify-content:flex-end;margin-bottom:24px">' +
+    '<div style="background:#1a1a1a;height:12px"></div><div style="padding:32px 40px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">' +
+    '<div><div style="font-size:26px;font-weight:900;color:#1a1a1a">DESERT LINK</div>' +
+    '<div style="font-size:11px;font-weight:700;color:#888;letter-spacing:3px">TECHNOLOGIES</div>' +
+    (settings.company_address ? '<div style="font-size:11px;color:#888;margin-top:8px">' + settings.company_address + '</div>' : '') +
+    (settings.company_phone ? '<div style="font-size:11px;color:#888">' + settings.company_phone + '</div>' : '') +
+    (settings.company_email ? '<div style="font-size:11px;color:#888">' + settings.company_email + '</div>' : '') + '</div>' +
+    '<div style="text-align:right"><div style="font-size:30px;font-weight:900;letter-spacing:2px">INVOICE</div>' +
+    '<div style="width:60px;height:4px;background:#E86900;margin:6px 0 0 auto"></div></div></div>' +
+    '<div style="display:flex;gap:40px;margin-bottom:24px">' +
+    '<div style="flex:1"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:5px">REMITTANCE ADDRESS</div>' +
+    '<div style="font-weight:700;font-size:13px">Desert Link Technologies LLC</div>' +
+    (settings.company_address ? '<div style="font-size:12px;color:#555">' + settings.company_address + '</div>' : '') + '</div>' +
+    '<div style="flex:1"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:5px">CUSTOMER</div>' +
+    '<div style="font-weight:700;font-size:13px">' + (wo.client_name || "") + '</div>' +
+    (wo.client_address ? '<div style="font-size:12px;color:#555">' + wo.client_address + '</div>' : '') + '</div></div>' +
+    (wo.location ? '<div style="margin-bottom:20px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:5px">SERVICE ADDRESS</div><div style="font-size:13px">' + wo.location + '</div></div>' : '') +
+    '<div style="display:flex;gap:40px;margin-bottom:24px"><div style="flex:1">' +
+    (wo.customer_po ? '<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">CUSTOMER PO</div><div style="font-weight:700;font-size:13px">' + wo.customer_po + '</div></div>' : '') +
+    (wo.project ? '<div><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">PROJECT</div><div style="font-weight:700;font-size:13px">' + wo.project + '</div></div>' : '') + '</div>' +
+    '<div style="flex:1"><div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">INVOICE#</div><div style="font-weight:700;font-size:13px">' + invNum + '</div></div>' +
+    '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">INVOICE DATE</div><div style="font-size:13px">' + invDate + '</div></div>' +
+    '<div><div style="font-size:10px;font-weight:800;color:#888;letter-spacing:.15em;margin-bottom:3px">INVOICE DUE DATE</div><div style="font-size:13px">' + dueDate + '</div></div></div></div>' +
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:0"><thead><tr style="background:#2a2a2a;color:#fff">' +
+    '<th style="padding:10px 16px;text-align:left;font-size:12px">Description</th><th style="padding:10px 16px;text-align:center;font-size:12px">Qty</th>' +
+    '<th style="padding:10px 16px;text-align:right;font-size:12px">Price</th><th style="padding:10px 16px;text-align:right;font-size:12px;background:#E86900">Total</th>' +
+    '</tr></thead><tbody>' + (rows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#aaa">No line items</td></tr>') + '</tbody></table>' +
+    '<div style="display:flex;justify-content:flex-end;margin-bottom:24px">' +
     '<div style="background:#2a2a2a;color:#fff;padding:11px 20px;font-weight:800;font-size:13px">Sub Total</div>' +
-    '<div style="background:#E86900;color:#fff;padding:11px 20px;font-weight:800;font-size:13px;min-width:90px;text-align:right">$' + sub.toFixed(2) + '</div>' +
-  '</div>' +
-  (wo.invoiceNotes ? '<div style="background:#f5f5f5;border-left:4px solid #2a2a2a;padding:14px 18px;margin-bottom:16px"><div style="font-size:10px;font-weight:800;color:#333;letter-spacing:.15em;margin-bottom:8px">INVOICE NOTES</div><div style="font-size:13px;color:#444;line-height:1.7">' + wo.invoiceNotes + '</div></div>' : '') +
-  '</div><div style="background:#E86900;height:8px"></div></body></html>';
+    '<div style="background:#E86900;color:#fff;padding:11px 20px;font-weight:800;font-size:13px;min-width:90px;text-align:right">$' + sub.toFixed(2) + '</div></div>' +
+    (wo.invoice_notes ? '<div style="background:#f5f5f5;border-left:4px solid #2a2a2a;padding:14px 18px;margin-bottom:16px"><div style="font-size:10px;font-weight:800;color:#333;letter-spacing:.15em;margin-bottom:8px">INVOICE NOTES</div><div style="font-size:13px;color:#444;line-height:1.7">' + wo.invoice_notes + '</div></div>' : '') +
+    '</div><div style="background:#E86900;height:8px"></div></body></html>';
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
-function FieldOps() {
-  const [store, setStore] = useState(() => loadStore() || freshStore());
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+function App() {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check existing session
+    supa.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) loadProfile(session.user.id);
+      else setLoading(false);
+    });
+    // Listen for auth changes
+    const { data: { subscription } } = supa.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) loadProfile(session.user.id);
+      else { setProfile(null); setLoading(false); }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadProfile = async (userId) => {
+    const { data } = await supa.from("profiles").select("*").eq("id", userId).single();
+    setProfile(data);
+    setLoading(false);
+  };
+
+  if (loading) return <div style={{ background: "#0A0F1A", minHeight: "100vh" }}><Spinner msg="Starting up…" /></div>;
+  if (!session) return <AuthScreen />;
+  return <FieldOps session={session} profile={profile} reloadProfile={() => loadProfile(session.user.id)} />;
+}
+
+// ── AUTH SCREEN ───────────────────────────────────────────────────────────────
+function AuthScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("login"); // login | signup | reset
+
+  const login = async () => {
+    setLoading(true); setError("");
+    const { error } = await supa.auth.signInWithPassword({ email, password });
+    if (error) setError(error.message);
+    setLoading(false);
+  };
+
+  const signup = async () => {
+    setLoading(true); setError("");
+    const { error } = await supa.auth.signUp({ email, password });
+    if (error) setError(error.message);
+    else setError("Check your email for a confirmation link.");
+    setLoading(false);
+  };
+
+  const reset = async () => {
+    setLoading(true); setError("");
+    const { error } = await supa.auth.resetPasswordForEmail(email);
+    if (error) setError(error.message);
+    else setError("Password reset email sent.");
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ background: "#0A0F1A", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px" }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.2em", color: "#E86900", marginBottom: 4 }}>FIELDOPS</div>
+          <div style={{ fontSize: 26, fontWeight: 900, color: "#F0F6FF" }}>Desert Link Technologies</div>
+          <div style={{ fontSize: 13, color: "#6B7E96", marginTop: 6 }}>Sign in to access your work orders</div>
+        </div>
+
+        {error && (
+          <div style={{ background: error.includes("email") || error.includes("sent") ? "#0B2444" : "#7F1D1D", color: error.includes("email") || error.includes("sent") ? "#7EBCF5" : "#FCA5A5", padding: "12px 16px", borderRadius: 10, marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
+            {error}
+          </div>
+        )}
+
+        <Card>
+          <F label="Email" value={email} onChange={setEmail} type="email" placeholder="you@email.com" />
+          {mode !== "reset" && <F label="Password" value={password} onChange={setPassword} type="password" placeholder="••••••••" />}
+          {mode === "login"  && <Btn onClick={login}  disabled={loading} color="#E86900">{loading ? "Signing in…" : "Sign In"}</Btn>}
+          {mode === "signup" && <Btn onClick={signup} disabled={loading} color="#E86900">{loading ? "Creating…"  : "Create Account"}</Btn>}
+          {mode === "reset"  && <Btn onClick={reset}  disabled={loading} color="#1A6FC4">{loading ? "Sending…"   : "Send Reset Email"}</Btn>}
+        </Card>
+
+        <div style={{ textAlign: "center", fontSize: 13, color: "#4A5568" }}>
+          {mode === "login"  && <><span onClick={() => setMode("reset")} style={{ color: "#7EBCF5", cursor: "pointer" }}>Forgot password?</span></>}
+          {mode === "reset"  && <span onClick={() => setMode("login")}  style={{ color: "#7EBCF5", cursor: "pointer" }}>Back to sign in</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── FIELDOPS MAIN ─────────────────────────────────────────────────────────────
+function FieldOps({ session, profile, reloadProfile }) {
+  const [workOrders, setWorkOrders] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [view, setView] = useState("dashboard");
   const [activeId, setActiveId] = useState(null);
   const [filterStatus, setFilterStatus] = useState("All");
   const [toast, setToast] = useState(null);
+  const [dataLoading, setDataLoading] = useState(true);
 
-  useEffect(() => { saveStore(store); }, [store]);
+  const isAdmin = profile?.role === "admin";
+  const userId  = session.user.id;
+  const userEmail = session.user.email;
 
-  const { workOrders, settings } = store;
-  const activeWO = workOrders.find(w => w.id === activeId);
+  const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
-  const update = (fn) => setStore(prev => { const next = fn(prev); saveStore(next); return next; });
+  // ── Load data ──
+  useEffect(() => {
+    loadAll();
+    // Real-time subscription
+    const channel = supa.channel("fieldops-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "work_orders" }, () => loadWorkOrders())
+      .subscribe();
+    return () => supa.removeChannel(channel);
+  }, []);
 
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2800);
+  const loadAll = async () => {
+    setDataLoading(true);
+    await Promise.all([loadWorkOrders(), loadSettings()]);
+    setDataLoading(false);
   };
 
-  const saveWO = (wo) => {
-    update(s => ({
-      ...s,
-      workOrders: s.workOrders.find(w => w.id === wo.id)
-        ? s.workOrders.map(w => w.id === wo.id ? { ...wo, updatedAt: Date.now() } : w)
-        : [{ ...wo, updatedAt: Date.now() }, ...s.workOrders],
-    }));
+  const loadWorkOrders = async () => {
+    let query = supa.from("work_orders").select("*").order("updated_at", { ascending: false });
+    // Techs only see their assigned WOs
+    if (profile && profile.role !== "admin") {
+      query = query.contains("assigned_techs", [userEmail]);
+    }
+    const { data, error } = await query;
+    if (!error && data) setWorkOrders(data);
   };
 
-  const deleteWO = (id) => {
-    update(s => ({ ...s, workOrders: s.workOrders.filter(w => w.id !== id) }));
+  const loadSettings = async () => {
+    const { data } = await supa.from("settings").select("*").eq("id", 1).single();
+    if (data) setSettings(data);
+    else setSettings({ company_name: "Desert Link Technologies LLC", company_address: "11733 W. Chase Ln, Avondale, AZ 85323", company_phone: "", company_email: "", invoice_seq: 21 });
+  };
+
+  const saveWO = async (wo) => {
+    const { line_items, time_logs, notes, ...rest } = wo;
+    const payload = { ...rest, line_items: line_items || [], time_logs: time_logs || [], notes: notes || [], updated_at: new Date().toISOString() };
+    if (wo.id && workOrders.find(w => w.id === wo.id)) {
+      const { error } = await supa.from("work_orders").update(payload).eq("id", wo.id);
+      if (error) { showToast("Save failed: " + error.message, "error"); return false; }
+    } else {
+      const { data, error } = await supa.from("work_orders").insert({ ...payload, created_by: userId }).select().single();
+      if (error) { showToast("Save failed: " + error.message, "error"); return false; }
+      if (data) { setActiveId(data.id); setWorkOrders(prev => [data, ...prev]); return data; }
+    }
+    await loadWorkOrders();
+    return true;
+  };
+
+  const deleteWO = async (id) => {
+    await supa.from("work_orders").delete().eq("id", id);
+    setWorkOrders(prev => prev.filter(w => w.id !== id));
     setView("list");
     showToast("Work order deleted");
   };
 
-  const saveSettings = (s) => { update(prev => ({ ...prev, settings: s })); showToast("Settings saved"); };
-  const openWO = (wo) => { setActiveId(wo.id); setView("detail"); };
+  const saveSettings = async (s) => {
+    await supa.from("settings").upsert({ ...s, id: 1 });
+    setSettings(s);
+    showToast("Settings saved");
+  };
+
+  const signOut = async () => { await supa.auth.signOut(); };
+  const openWO  = (wo) => { setActiveId(wo.id); setView("detail"); };
+  const activeWO = workOrders.find(w => w.id === activeId);
 
   const filtered = workOrders
     .filter(w => filterStatus === "All" || w.status === filterStatus)
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
   const stats = {
-    open: workOrders.filter(w => w.status === "Open").length,
+    open:       workOrders.filter(w => w.status === "Open").length,
     inProgress: workOrders.filter(w => w.status === "In Progress").length,
-    completed: workOrders.filter(w => w.status === "Completed").length,
-    invoiced: workOrders.filter(w => w.status === "Invoiced").length,
-    revenue: workOrders.filter(w => w.status === "Invoiced")
-      .reduce((s, w) => s + (w.lineItems || []).reduce((si, i) => si + parseFloat(i.qty) * parseFloat(i.rate), 0), 0),
+    completed:  workOrders.filter(w => w.status === "Completed").length,
+    invoiced:   workOrders.filter(w => w.status === "Invoiced").length,
+    revenue:    workOrders.filter(w => w.status === "Invoiced").reduce((s, w) => s + (w.line_items || []).reduce((si, i) => si + parseFloat(i.qty) * parseFloat(i.rate), 0), 0),
   };
 
   return (
     <div style={{ background: "#0A0F1A", minHeight: "100vh", color: "#E2E8F0", maxWidth: 480, margin: "0 auto", paddingBottom: 90 }}>
 
-      {toast && (
-        <div style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", background: toast.type === "success" ? "#065F46" : "#7F1D1D", color: "#fff", padding: "10px 20px", borderRadius: 10, zIndex: 9999, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", maxWidth: 340, textAlign: "center" }}>
-          {toast.msg}
-        </div>
-      )}
+      {toast && <div style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", background: toast.type === "success" ? "#065F46" : "#7F1D1D", color: "#fff", padding: "10px 20px", borderRadius: 10, zIndex: 9999, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", maxWidth: 340, textAlign: "center" }}>{toast.msg}</div>}
 
+      {/* Header */}
       <div style={{ background: "#0D1626", borderBottom: "1px solid #1E2D45", padding: "16px 20px 12px", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", color: "#E86900" }}>FIELDOPS</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: "#F0F6FF", lineHeight: 1.1 }}>{settings.companyName}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", color: "#E86900" }}>FIELDOPS {isAdmin && "· ADMIN"}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: "#F0F6FF" }}>{settings?.company_name || "Desert Link"}</div>
           </div>
-          <button onClick={() => setView("settings")} style={{ background: "none", border: "none", color: "#4A8FC1", fontSize: 22, cursor: "pointer", padding: 4 }}>⚙</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={loadAll} style={{ background: "none", border: "none", color: "#4A8FC1", fontSize: 20, cursor: "pointer", padding: 4 }}>↻</button>
+            {isAdmin && <button onClick={() => setView("settings")} style={{ background: "none", border: "none", color: "#4A8FC1", fontSize: 22, cursor: "pointer", padding: 4 }}>⚙</button>}
+            <button onClick={signOut} style={{ background: "none", border: "none", color: "#4A5568", fontSize: 13, cursor: "pointer", padding: 4, fontWeight: 600 }}>Out</button>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: "#2D5A8A", marginTop: 3 }}>
+          <span style={{ color: "#34D399" }}>●</span> {userEmail}
         </div>
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
-        {view === "dashboard" && <Dashboard stats={stats} workOrders={workOrders} openWO={openWO} setView={setView} />}
-        {view === "list"      && <WOList orders={filtered} openWO={openWO} filterStatus={filterStatus} setFilterStatus={setFilterStatus} />}
-        {view === "new"       && <NewWO settings={settings} store={store} update={update} setView={setView} setActiveId={setActiveId} showToast={showToast} />}
-        {view === "detail"    && activeWO && <WODetail wo={activeWO} settings={settings} saveWO={saveWO} deleteWO={deleteWO} setView={setView} showToast={showToast} />}
-        {view === "invoice"   && activeWO && <InvoiceView wo={activeWO} settings={settings} saveWO={saveWO} update={update} setView={setView} showToast={showToast} />}
-        {view === "settings"  && <SettingsView settings={settings} saveSettings={saveSettings} setView={setView} workOrders={workOrders} update={update} />}
+        {dataLoading ? <Spinner msg="Loading work orders…" /> : (
+          <>
+            {view === "dashboard" && <Dashboard stats={stats} workOrders={workOrders} openWO={openWO} setView={setView} isAdmin={isAdmin} />}
+            {view === "list"      && <WOList orders={filtered} openWO={openWO} filterStatus={filterStatus} setFilterStatus={setFilterStatus} />}
+            {view === "new"       && isAdmin && <NewWO settings={settings} saveWO={saveWO} setView={setView} setActiveId={setActiveId} showToast={showToast} />}
+            {view === "detail"    && activeWO && <WODetail wo={activeWO} settings={settings} saveWO={saveWO} deleteWO={deleteWO} setView={setView} showToast={showToast} isAdmin={isAdmin} userId={userId} />}
+            {view === "invoice"   && activeWO && isAdmin && <InvoiceView wo={activeWO} settings={settings} saveWO={saveWO} saveSettings={saveSettings} setView={setView} showToast={showToast} />}
+            {view === "settings"  && isAdmin && <SettingsView settings={settings} saveSettings={saveSettings} setView={setView} session={session} />}
+          </>
+        )}
       </div>
 
+      {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "#0D1626", borderTop: "1px solid #1E2D45", display: "flex", justifyContent: "space-around", alignItems: "center", padding: "8px 0 24px", zIndex: 200 }}>
-        {[{ id: "dashboard", icon: "◈", label: "Dashboard" }, { id: "list", icon: "☰", label: "Orders" }, { id: "new", primary: true }].map(t => (
+        {[{ id: "dashboard", icon: "◈", label: "Dashboard" }, { id: "list", icon: "☰", label: "Orders" }, isAdmin ? { id: "new", primary: true } : null].filter(Boolean).map(t => (
           <button key={t.id} onClick={() => setView(t.id)} style={{ background: t.primary ? "#E86900" : "none", border: "none", color: t.primary ? "#fff" : (view === t.id ? "#E86900" : "#556070"), display: "flex", flexDirection: "column", alignItems: "center", fontSize: t.primary ? 28 : 11, fontWeight: t.primary ? 400 : 600, cursor: "pointer", padding: t.primary ? 0 : "4px 24px", borderRadius: t.primary ? "50%" : 0, width: t.primary ? 52 : "auto", height: t.primary ? 52 : "auto", justifyContent: "center", marginTop: t.primary ? -16 : 0, boxShadow: t.primary ? "0 4px 16px rgba(232,105,0,0.5)" : "none", letterSpacing: "0.04em", textTransform: "uppercase" }}>
             {t.primary ? "+" : <><span style={{ fontSize: 18, marginBottom: 2 }}>{t.icon}</span>{t.label}</>}
           </button>
@@ -293,8 +386,9 @@ function FieldOps() {
   );
 }
 
-function Dashboard({ stats, workOrders, openWO, setView }) {
-  const recent = [...workOrders].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function Dashboard({ stats, workOrders, openWO, setView, isAdmin }) {
+  const recent = [...workOrders].slice(0, 5);
   return (
     <div>
       <div style={{ fontSize: 12, color: "#6B7E96", fontWeight: 700, marginBottom: 10, letterSpacing: "0.08em" }}>OVERVIEW</div>
@@ -306,10 +400,12 @@ function Dashboard({ stats, workOrders, openWO, setView }) {
           </div>
         ))}
       </div>
-      <div style={{ background: "#1A1200", borderRadius: 12, padding: "14px 16px", border: "1px solid #3A2800", marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: "#E86900", fontWeight: 700, letterSpacing: "0.1em" }}>INVOICED REVENUE</div>
-        <div style={{ fontSize: 30, fontWeight: 800, color: "#FFA040", marginTop: 4 }}>${stats.revenue.toFixed(2)}</div>
-      </div>
+      {isAdmin && (
+        <div style={{ background: "#1A1200", borderRadius: 12, padding: "14px 16px", border: "1px solid #3A2800", marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: "#E86900", fontWeight: 700, letterSpacing: "0.1em" }}>INVOICED REVENUE</div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: "#FFA040", marginTop: 4 }}>${stats.revenue.toFixed(2)}</div>
+        </div>
+      )}
       {recent.length > 0 && (<>
         <div style={{ fontSize: 12, color: "#6B7E96", fontWeight: 700, marginBottom: 10 }}>RECENT</div>
         {recent.map(wo => <WOCard key={wo.id} wo={wo} onClick={() => openWO(wo)} />)}
@@ -318,8 +414,8 @@ function Dashboard({ stats, workOrders, openWO, setView }) {
       {workOrders.length === 0 && (
         <div style={{ textAlign: "center", padding: "48px 20px", color: "#4A5568" }}>
           <div style={{ fontSize: 44, marginBottom: 12 }}>📋</div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: "#6B7E96" }}>No work orders yet</div>
-          <div style={{ fontSize: 13, marginTop: 6 }}>Tap + to create your first one</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: "#6B7E96" }}>{isAdmin ? "No work orders yet" : "No work orders assigned to you"}</div>
+          {isAdmin && <div style={{ fontSize: 13, marginTop: 6 }}>Tap + to create your first one</div>}
         </div>
       )}
     </div>
@@ -327,21 +423,21 @@ function Dashboard({ stats, workOrders, openWO, setView }) {
 }
 
 function WOCard({ wo, onClick }) {
-  const hours = (wo.timeLogs || []).reduce((s, l) => s + parseFloat(l.hours || 0), 0);
-  const techs = Array.isArray(wo.assignedTechs) ? wo.assignedTechs : [];
+  const hours = (wo.time_logs || []).reduce((s, l) => s + parseFloat(l.hours || 0), 0);
+  const techs = Array.isArray(wo.assigned_techs) ? wo.assigned_techs : [];
   return (
     <div onClick={onClick} style={{ background: "#111827", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: "1px solid #1E2D45", cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-        <div style={{ fontSize: 11, color: "#E86900", fontWeight: 700 }}>WO-{wo.id}</div>
+        <div style={{ fontSize: 11, color: "#E86900", fontWeight: 700 }}>WO-{wo.wo_number || wo.id?.slice(0,8)}</div>
         <Badge status={wo.status} />
       </div>
-      <div style={{ fontWeight: 700, fontSize: 15, color: "#E2E8F0", marginBottom: 3 }}>{wo.clientName}</div>
+      <div style={{ fontWeight: 700, fontSize: 15, color: "#E2E8F0", marginBottom: 3 }}>{wo.client_name}</div>
       {wo.project && <div style={{ fontSize: 11, color: "#E86900", marginBottom: 3, fontWeight: 600 }}>{wo.project}</div>}
-      <div style={{ fontSize: 12, color: "#6B7E96", marginBottom: 8 }}>{wo.workType} · {wo.location}</div>
+      <div style={{ fontSize: 12, color: "#6B7E96", marginBottom: 8 }}>{wo.work_type} · {wo.location}</div>
       <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#4A5568" }}>
         <span>👤 {techs.join(", ") || "Unassigned"}</span>
         <span>⏱ {hours.toFixed(1)}h</span>
-        <span>💰 {(wo.lineItems || []).length} items</span>
+        <span>💰 {(wo.line_items || []).length} items</span>
       </div>
     </div>
   );
@@ -361,20 +457,21 @@ function WOList({ orders, openWO, filterStatus, setFilterStatus }) {
   );
 }
 
-function NewWO({ settings, store, update, setView, setActiveId, showToast }) {
-  const [form, setForm] = useState({ clientName: "", clientAddress: "", clientPhone: "", clientEmail: "", location: "", customerPO: "", project: "", workType: settings.workTypes[0] || "", description: "", assignedTechs: [], scheduledDate: todayStr(), priority: "Normal" });
+// ── New WO (admin only) ───────────────────────────────────────────────────────
+function NewWO({ settings, saveWO, setView, setActiveId, showToast }) {
+  const WORK_TYPES = ["Structured Cabling", "Network Infrastructure", "IP Camera / CCTV", "Access Control", "Managed IT Services", "Rack & Stack", "Fiber Optic", "Wireless AP Deployment", "Server Room Build-Out", "Alarm System"];
+  const [form, setForm] = useState({ client_name: "", client_address: "", client_phone: "", client_email: "", location: "", customer_po: "", project: "", work_type: WORK_TYPES[0], description: "", assigned_techs: [], scheduled_date: todayStr(), priority: "Normal", status: "Open", line_items: [], time_logs: [], notes: [], invoice_notes: "" });
+  const [techInput, setTechInput] = useState("");
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const toggle = (t) => set("assignedTechs", form.assignedTechs.includes(t) ? form.assignedTechs.filter(x => x !== t) : [...form.assignedTechs, t]);
+  const addTech = () => { const t = techInput.trim(); if (!t) return; set("assigned_techs", [...form.assigned_techs, t]); setTechInput(""); };
+  const rmTech = (t) => set("assigned_techs", form.assigned_techs.filter(x => x !== t));
 
-  const submit = () => {
-    if (!form.clientName.trim()) { showToast("Client name required", "error"); return; }
-    if (!form.location.trim())   { showToast("Service address required", "error"); return; }
-    const id = store.nextId;
-    const wo = { ...form, id, status: "Open", createdAt: Date.now(), updatedAt: Date.now(), timeLogs: [], lineItems: [], notes: [], invoiceNotes: "" };
-    update(s => ({ ...s, nextId: s.nextId + 1, workOrders: [wo, ...s.workOrders] }));
-    setActiveId(id);
-    setView("detail");
-    showToast("Work order created");
+  const submit = async () => {
+    if (!form.client_name.trim()) { showToast("Client name required", "error"); return; }
+    if (!form.location.trim())    { showToast("Service address required", "error"); return; }
+    const wo_number = Date.now().toString().slice(-6);
+    const result = await saveWO({ ...form, wo_number });
+    if (result) { setView("detail"); showToast("Work order created"); }
   };
 
   return (
@@ -384,23 +481,30 @@ function NewWO({ settings, store, update, setView, setActiveId, showToast }) {
         <div style={{ fontSize: 18, fontWeight: 800 }}>New Work Order</div>
       </div>
       <Card><SL>CLIENT INFO</SL>
-        <F label="Client / Company Name *" value={form.clientName} onChange={v => set("clientName", v)} placeholder="e.g. Super Star Car Wash" />
-        <F label="Billing Address" value={form.clientAddress} onChange={v => set("clientAddress", v)} placeholder="960 W. Behrend Dr. Ste 1, Phoenix AZ" />
-        <F label="Phone" value={form.clientPhone} onChange={v => set("clientPhone", v)} type="tel" />
-        <F label="Email" value={form.clientEmail} onChange={v => set("clientEmail", v)} type="email" />
+        <F label="Client / Company Name *" value={form.client_name} onChange={v => set("client_name", v)} placeholder="e.g. Super Star Car Wash" />
+        <F label="Billing Address" value={form.client_address} onChange={v => set("client_address", v)} placeholder="960 W. Behrend Dr. Ste 1, Phoenix AZ" />
+        <F label="Phone" value={form.client_phone} onChange={v => set("client_phone", v)} type="tel" />
+        <F label="Email" value={form.client_email} onChange={v => set("client_email", v)} type="email" />
       </Card>
       <Card><SL>JOB DETAILS</SL>
         <F label="Service Address *" value={form.location} onChange={v => set("location", v)} placeholder="1625 W Bell Rd, Phoenix AZ 85023" />
-        <F label="Customer PO" value={form.customerPO} onChange={v => set("customerPO", v)} placeholder="e.g. SUPRAZ-AMO52126" />
+        <F label="Customer PO" value={form.customer_po} onChange={v => set("customer_po", v)} placeholder="e.g. SUPRAZ-AMO52126" />
         <F label="Project" value={form.project} onChange={v => set("project", v)} placeholder="e.g. Store 2019 - CarPic Camera" />
-        <Sel label="Work Type" value={form.workType} options={settings.workTypes} onChange={v => set("workType", v)} />
+        <Sel label="Work Type" value={form.work_type} options={WORK_TYPES} onChange={v => set("work_type", v)} />
         <Sel label="Priority" value={form.priority} options={["Low", "Normal", "High", "Emergency"]} onChange={v => set("priority", v)} />
-        <F label="Scheduled Date" value={form.scheduledDate} onChange={v => set("scheduledDate", v)} type="date" />
+        <F label="Scheduled Date" value={form.scheduled_date} onChange={v => set("scheduled_date", v)} type="date" />
         <TA label="Scope of Work" value={form.description} onChange={v => set("description", v)} placeholder="Describe the work to be performed…" />
       </Card>
-      <Card><SL>ASSIGN TECHNICIANS</SL>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {settings.techs.map(t => <button key={t} onClick={() => toggle(t)} style={{ background: form.assignedTechs.includes(t) ? "#E86900" : "#1A2333", border: form.assignedTechs.includes(t) ? "none" : "1px solid #1E2D45", color: form.assignedTechs.includes(t) ? "#fff" : "#8899AA", borderRadius: 20, padding: "8px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{t}</button>)}
+      <Card><SL>ASSIGN TECHNICIANS (enter email addresses)</SL>
+        {form.assigned_techs.map(t => (
+          <div key={t} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #1A2333" }}>
+            <span style={{ fontSize: 13, color: "#C2D3E8" }}>{t}</span>
+            <button onClick={() => rmTech(t)} style={{ background: "none", border: "none", color: "#4A5568", cursor: "pointer", fontSize: 20 }}>×</button>
+          </div>
+        ))}
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <input value={techInput} onChange={e => setTechInput(e.target.value)} placeholder="tech@email.com" onKeyDown={e => e.key === "Enter" && addTech()} style={{ flex: 1, ...INP }} autoCapitalize="none" />
+          <button onClick={addTech} style={{ padding: "0 16px", background: "#E86900", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, cursor: "pointer" }}>+</button>
         </div>
       </Card>
       <Btn onClick={submit} color="#E86900">Create Work Order</Btn>
@@ -408,65 +512,69 @@ function NewWO({ settings, store, update, setView, setActiveId, showToast }) {
   );
 }
 
-function WODetail({ wo, settings, saveWO, deleteWO, setView, showToast }) {
+// ── WO Detail ─────────────────────────────────────────────────────────────────
+function WODetail({ wo, settings, saveWO, deleteWO, setView, showToast, isAdmin, userId }) {
   const [tab, setTab] = useState("overview");
   const [local, setLocal] = useState(wo);
-  useEffect(() => setLocal(wo), [wo.id, wo.updatedAt]);
-  const persist = (patch) => { const u = { ...local, ...patch, updatedAt: Date.now() }; setLocal(u); saveWO(u); };
+  useEffect(() => setLocal(wo), [wo.id, wo.updated_at]);
+
+  const persist = async (patch) => {
+    const updated = { ...local, ...patch };
+    setLocal(updated);
+    await saveWO(updated);
+  };
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <button onClick={() => setView("list")} style={{ background: "none", border: "none", color: "#4A8FC1", fontSize: 22, cursor: "pointer" }}>←</button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: "#E86900", fontWeight: 700 }}>WO-{local.id}</div>
-          <div style={{ fontSize: 17, fontWeight: 800 }}>{local.clientName}</div>
+          <div style={{ fontSize: 11, color: "#E86900", fontWeight: 700 }}>WO-{local.wo_number || local.id?.slice(0,8)}</div>
+          <div style={{ fontSize: 17, fontWeight: 800 }}>{local.client_name}</div>
           {local.project && <div style={{ fontSize: 12, color: "#E86900", fontWeight: 600 }}>{local.project}</div>}
         </div>
         <Badge status={local.status} />
       </div>
+
+      {/* Status — techs can update status */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto" }}>
         {["Open", "In Progress", "On Hold", "Completed"].map(s => (
-          <button key={s} onClick={() => { persist({ status: s }); showToast("Status → " + s); }} style={{ background: local.status === s ? "#E86900" : "#111827", border: local.status === s ? "none" : "1px solid #1E2D45", color: local.status === s ? "#fff" : "#6B7E96", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{s}</button>
+          <button key={s} onClick={() => persist({ status: s })} style={{ background: local.status === s ? "#E86900" : "#111827", border: local.status === s ? "none" : "1px solid #1E2D45", color: local.status === s ? "#fff" : "#6B7E96", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{s}</button>
         ))}
       </div>
+
       <div style={{ display: "flex", borderBottom: "1px solid #1E2D45", marginBottom: 16, overflowX: "auto" }}>
-        {["overview", "time", "billing", "notes"].map(t => (
+        {["overview", "time", ...(isAdmin ? ["billing"] : []), "notes"].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ background: "none", border: "none", borderBottom: tab === t ? "2px solid #E86900" : "2px solid transparent", color: tab === t ? "#FFA040" : "#4A5568", padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", textTransform: "capitalize", whiteSpace: "nowrap", flexShrink: 0 }}>{t}</button>
         ))}
       </div>
-      {tab === "overview" && <OverviewTab wo={local} settings={settings} persist={persist} showToast={showToast} deleteWO={deleteWO} />}
-      {tab === "time"     && <TimeTab wo={local} techs={settings.techs} persist={persist} showToast={showToast} />}
-      {tab === "billing"  && <BillingTab wo={local} persist={persist} showToast={showToast} onInvoice={() => setView("invoice")} />}
+
+      {tab === "overview" && <OverviewTab wo={local} persist={persist} showToast={showToast} deleteWO={deleteWO} isAdmin={isAdmin} />}
+      {tab === "time"     && <TimeTab wo={local} persist={persist} showToast={showToast} userId={userId} userEmail={local.assigned_techs?.[0] || ""} />}
+      {tab === "billing"  && isAdmin && <BillingTab wo={local} persist={persist} showToast={showToast} onInvoice={() => setView("invoice")} />}
       {tab === "notes"    && <NotesTab wo={local} persist={persist} showToast={showToast} />}
     </div>
   );
 }
 
-function OverviewTab({ wo, settings, persist, showToast, deleteWO }) {
+function OverviewTab({ wo, persist, showToast, deleteWO, isAdmin }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...wo });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const toggle = (t) => set("assignedTechs", (form.assignedTechs || []).includes(t) ? form.assignedTechs.filter(x => x !== t) : [...(form.assignedTechs || []), t]);
-  const save = () => { persist(form); setEditing(false); showToast("Saved"); };
+  const save = async () => { await persist(form); setEditing(false); showToast("Saved"); };
 
-  if (editing) return (
+  if (editing && isAdmin) return (
     <div>
-      <F label="Client Name" value={form.clientName} onChange={v => set("clientName", v)} />
-      <F label="Billing Address" value={form.clientAddress} onChange={v => set("clientAddress", v)} />
-      <F label="Phone" value={form.clientPhone} onChange={v => set("clientPhone", v)} />
-      <F label="Email" value={form.clientEmail} onChange={v => set("clientEmail", v)} />
+      <F label="Client Name" value={form.client_name} onChange={v => set("client_name", v)} />
+      <F label="Billing Address" value={form.client_address} onChange={v => set("client_address", v)} />
+      <F label="Phone" value={form.client_phone} onChange={v => set("client_phone", v)} />
+      <F label="Email" value={form.client_email} onChange={v => set("client_email", v)} />
       <F label="Service Address" value={form.location} onChange={v => set("location", v)} />
-      <F label="Customer PO" value={form.customerPO} onChange={v => set("customerPO", v)} />
+      <F label="Customer PO" value={form.customer_po} onChange={v => set("customer_po", v)} />
       <F label="Project" value={form.project} onChange={v => set("project", v)} />
-      <Sel label="Work Type" value={form.workType} options={settings.workTypes} onChange={v => set("workType", v)} />
       <Sel label="Priority" value={form.priority} options={["Low", "Normal", "High", "Emergency"]} onChange={v => set("priority", v)} />
-      <F label="Scheduled Date" value={form.scheduledDate} onChange={v => set("scheduledDate", v)} type="date" />
+      <F label="Scheduled Date" value={form.scheduled_date} onChange={v => set("scheduled_date", v)} type="date" />
       <TA label="Scope of Work" value={form.description} onChange={v => set("description", v)} />
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7E96", marginBottom: 8 }}>ASSIGN TECHS</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        {settings.techs.map(t => <button key={t} onClick={() => toggle(t)} style={{ background: (form.assignedTechs || []).includes(t) ? "#E86900" : "#1A2333", border: (form.assignedTechs || []).includes(t) ? "none" : "1px solid #1E2D45", color: (form.assignedTechs || []).includes(t) ? "#fff" : "#8899AA", borderRadius: 20, padding: "8px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{t}</button>)}
-      </div>
       <div style={{ display: "flex", gap: 10 }}>
         <button onClick={save} style={{ flex: 1, padding: 14, background: "#E86900", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, cursor: "pointer" }}>Save</button>
         <button onClick={() => setEditing(false)} style={{ flex: 1, padding: 14, background: "#1A2333", border: "none", borderRadius: 10, color: "#aaa", fontWeight: 700, cursor: "pointer" }}>Cancel</button>
@@ -474,7 +582,7 @@ function OverviewTab({ wo, settings, persist, showToast, deleteWO }) {
     </div>
   );
 
-  const rows = [["Service Address", wo.location], ["Customer PO", wo.customerPO], ["Project", wo.project], ["Work Type", wo.workType], ["Priority", wo.priority], ["Scheduled", fmtDate(wo.scheduledDate)], ["Assigned", (wo.assignedTechs || []).join(", ") || "Unassigned"], ["Phone", wo.clientPhone], ["Email", wo.clientEmail], ["Billing Addr", wo.clientAddress]].filter(r => r[1]);
+  const rows = [["Service Address", wo.location], ["Customer PO", wo.customer_po], ["Project", wo.project], ["Work Type", wo.work_type], ["Priority", wo.priority], ["Scheduled", fmtDate(wo.scheduled_date)], ["Assigned", (wo.assigned_techs || []).join(", ") || "Unassigned"], ["Phone", wo.client_phone], ["Email", wo.client_email]].filter(r => r[1]);
 
   return (
     <div>
@@ -487,14 +595,16 @@ function OverviewTab({ wo, settings, persist, showToast, deleteWO }) {
         ))}
       </Card>
       {wo.description && <Card><SL>SCOPE OF WORK</SL><div style={{ fontSize: 13, color: "#C2D3E8", lineHeight: 1.6 }}>{wo.description}</div></Card>}
-      <Ghost onClick={() => setEditing(true)}>✏ Edit Work Order</Ghost>
-      <button onClick={() => { if (window.confirm("Delete this work order?")) deleteWO(wo.id); }} style={{ width: "100%", padding: 12, background: "none", border: "1px solid #7F1D1D", borderRadius: 10, color: "#FCA5A5", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10 }}>🗑 Delete Work Order</button>
+      {isAdmin && <>
+        <Ghost onClick={() => setEditing(true)}>✏ Edit Work Order</Ghost>
+        <button onClick={() => { if (window.confirm("Delete this work order?")) deleteWO(wo.id); }} style={{ width: "100%", padding: 12, background: "none", border: "1px solid #7F1D1D", borderRadius: 10, color: "#FCA5A5", fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 10 }}>🗑 Delete Work Order</button>
+      </>}
     </div>
   );
 }
 
-function TimeTab({ wo, techs, persist, showToast }) {
-  const [tech, setTech] = useState(techs[0] || "");
+function TimeTab({ wo, persist, showToast }) {
+  const [techName, setTechName] = useState("");
   const [hours, setHours] = useState("");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayStr());
@@ -508,39 +618,39 @@ function TimeTab({ wo, techs, persist, showToast }) {
     return () => clearInterval(timer.current);
   }, [clockIn]);
 
-  const fmtE = (ms) => { const s = Math.floor(ms / 1000); return String(Math.floor(s/3600)).padStart(2,"0") + ":" + String(Math.floor((s%3600)/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0"); };
-  const stopClock = () => { const h = parseFloat(((Date.now()-clockIn)/3600000).toFixed(2)); persist({ timeLogs: [...(wo.timeLogs||[]), {id:uid(),tech,hours:h,note:"Clock in/out",date}] }); setClockIn(null); showToast(h+"h logged for "+tech); };
-  const addManual = () => { if (!hours||isNaN(hours)||parseFloat(hours)<=0) { showToast("Enter valid hours","error"); return; } persist({ timeLogs: [...(wo.timeLogs||[]), {id:uid(),tech,hours:parseFloat(hours),note,date}] }); setHours(""); setNote(""); showToast(hours+"h logged"); };
-  const remove = (id) => persist({ timeLogs: (wo.timeLogs||[]).filter(l=>l.id!==id) });
-  const total = (wo.timeLogs||[]).reduce((s,l)=>s+parseFloat(l.hours||0),0);
+  const fmtE = (ms) => { const s = Math.floor(ms / 1000); return String(Math.floor(s/3600)).padStart(2,"0")+":"+String(Math.floor((s%3600)/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); };
+  const stopClock = async () => { const h = parseFloat(((Date.now()-clockIn)/3600000).toFixed(2)); await persist({ time_logs: [...(wo.time_logs||[]), {id:uid(),tech:techName||"Me",hours:h,note:"Clock in/out",date}] }); setClockIn(null); showToast(h+"h logged"); };
+  const addManual = async () => { if (!hours||isNaN(hours)||parseFloat(hours)<=0) { showToast("Enter valid hours","error"); return; } await persist({ time_logs: [...(wo.time_logs||[]), {id:uid(),tech:techName||"Me",hours:parseFloat(hours),note,date}] }); setHours(""); setNote(""); showToast(hours+"h logged"); };
+  const remove = async (id) => persist({ time_logs: (wo.time_logs||[]).filter(l=>l.id!==id) });
+  const total = (wo.time_logs||[]).reduce((s,l)=>s+parseFloat(l.hours||0),0);
 
   return (
     <div>
       <Card style={{ background: clockIn ? "#0B2444" : "#111827", border: clockIn ? "1px solid #1A4A7A" : "1px solid #1E2D45", textAlign: "center" }}>
         <SL>STOPWATCH</SL>
         {clockIn ? <div style={{ fontSize: 36, fontWeight: 800, color: "#7EBCF5", marginBottom: 12, fontVariantNumeric: "tabular-nums", letterSpacing: 2 }}>{fmtE(elapsed)}</div>
-                 : <div style={{ fontSize: 13, color: "#4A5568", marginBottom: 12 }}>Tap Clock In to start tracking on-site time</div>}
-        <Sel value={tech} options={techs} onChange={setTech} />
+                 : <div style={{ fontSize: 13, color: "#4A5568", marginBottom: 12 }}>Tap Clock In to start tracking time</div>}
+        <F label="Your Name" value={techName} onChange={setTechName} placeholder="Your name" />
         <button onClick={clockIn ? stopClock : ()=>setClockIn(Date.now())} style={{ width:"100%",padding:14,borderRadius:10,border:"none",fontWeight:800,fontSize:15,cursor:"pointer",background:clockIn?"#7F1D1D":"#065F46",color:clockIn?"#FCA5A5":"#6EE7B7",marginTop:8 }}>
           {clockIn ? "⏹ Clock Out & Save" : "⏱ Clock In"}
         </button>
       </Card>
       <Card><SL>MANUAL ENTRY</SL>
-        <Sel value={tech} options={techs} onChange={setTech} />
+        <F label="Your Name" value={techName} onChange={setTechName} placeholder="Your name" />
         <F label="Hours" value={hours} onChange={setHours} placeholder="e.g. 2.5" type="number" />
         <F label="Date" value={date} onChange={setDate} type="date" />
         <F label="Notes" value={note} onChange={setNote} placeholder="What was done?" />
         <Btn onClick={addManual} color="#E86900">Add Time Entry</Btn>
       </Card>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#E86900", marginBottom: 10 }}>LOG · TOTAL: {total.toFixed(2)}h</div>
-      {(wo.timeLogs||[]).length===0 && <div style={{ textAlign:"center",color:"#4A5568",fontSize:13,padding:20 }}>No time logged yet</div>}
-      {[...(wo.timeLogs||[])].reverse().map(log => (
+      {(wo.time_logs||[]).length===0 && <div style={{ textAlign:"center",color:"#4A5568",fontSize:13,padding:20 }}>No time logged yet</div>}
+      {[...(wo.time_logs||[])].reverse().map(log => (
         <div key={log.id} style={{ background:"#111827",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #1E2D45",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div>
             <div style={{ fontWeight:700,fontSize:14 }}>{log.tech} · <span style={{ color:"#FFA040" }}>{log.hours}h</span></div>
-            <div style={{ fontSize:12,color:"#4A5568" }}>{fmtDate(log.date)}{log.note ? " · "+log.note : ""}</div>
+            <div style={{ fontSize:12,color:"#4A5568" }}>{fmtDate(log.date)}{log.note?" · "+log.note:""}</div>
           </div>
-          <button onClick={()=>remove(log.id)} style={{ background:"none",border:"none",color:"#4A5568",cursor:"pointer",fontSize:22,padding:"0 4px" }}>×</button>
+          <button onClick={()=>remove(log.id)} style={{ background:"none",border:"none",color:"#4A5568",cursor:"pointer",fontSize:22 }}>×</button>
         </div>
       ))}
     </div>
@@ -548,14 +658,11 @@ function TimeTab({ wo, techs, persist, showToast }) {
 }
 
 function BillingTab({ wo, persist, showToast, onInvoice }) {
-  const [desc, setDesc] = useState("");
-  const [qty, setQty] = useState("1");
-  const [rate, setRate] = useState("");
-  const add = () => { if (!desc.trim()||!rate||isNaN(rate)) { showToast("Fill in description and rate","error"); return; } persist({ lineItems:[...(wo.lineItems||[]),{id:uid(),desc,qty:parseFloat(qty),rate:parseFloat(rate)}] }); setDesc(""); setQty("1"); setRate(""); showToast("Line item added"); };
-  const remove = (id) => persist({ lineItems:(wo.lineItems||[]).filter(i=>i.id!==id) });
-  const sub = (wo.lineItems||[]).reduce((s,i)=>s+parseFloat(i.qty)*parseFloat(i.rate),0);
-  const hours = (wo.timeLogs||[]).reduce((s,l)=>s+parseFloat(l.hours||0),0);
-
+  const [desc, setDesc] = useState(""); const [qty, setQty] = useState("1"); const [rate, setRate] = useState("");
+  const add = async () => { if (!desc.trim()||!rate||isNaN(rate)) { showToast("Fill in description and rate","error"); return; } await persist({ line_items:[...(wo.line_items||[]),{id:uid(),desc,qty:parseFloat(qty),rate:parseFloat(rate)}] }); setDesc(""); setQty("1"); setRate(""); showToast("Line item added"); };
+  const remove = async (id) => persist({ line_items:(wo.line_items||[]).filter(i=>i.id!==id) });
+  const sub = (wo.line_items||[]).reduce((s,i)=>s+parseFloat(i.qty)*parseFloat(i.rate),0);
+  const hours = (wo.time_logs||[]).reduce((s,l)=>s+parseFloat(l.hours||0),0);
   return (
     <div>
       <Card><SL>ADD LINE ITEM</SL>
@@ -566,12 +673,9 @@ function BillingTab({ wo, persist, showToast, onInvoice }) {
         </div>
         <Btn onClick={add} color="#E86900">+ Add Item</Btn>
       </Card>
-      {(wo.lineItems||[]).map(item => (
+      {(wo.line_items||[]).map(item => (
         <div key={item.id} style={{ background:"#111827",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #1E2D45",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-          <div>
-            <div style={{ fontWeight:700,fontSize:14 }}>{item.desc}</div>
-            <div style={{ fontSize:12,color:"#4A5568" }}>{item.qty} × {fmt$(item.rate)}</div>
-          </div>
+          <div><div style={{ fontWeight:700,fontSize:14 }}>{item.desc}</div><div style={{ fontSize:12,color:"#4A5568" }}>{item.qty} × {fmt$(item.rate)}</div></div>
           <div style={{ display:"flex",alignItems:"center",gap:10 }}>
             <span style={{ color:"#FFA040",fontWeight:700 }}>{fmt$(item.qty*item.rate)}</span>
             <button onClick={()=>remove(item.id)} style={{ background:"none",border:"none",color:"#4A5568",cursor:"pointer",fontSize:22 }}>×</button>
@@ -579,14 +683,8 @@ function BillingTab({ wo, persist, showToast, onInvoice }) {
         </div>
       ))}
       <Card><SL>SUMMARY</SL>
-        <div style={{ display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1A2333" }}>
-          <span style={{ fontSize:13,color:"#6B7E96" }}>Time Logged</span>
-          <span style={{ fontSize:13,color:"#C2D3E8",fontWeight:600 }}>{hours.toFixed(2)} hrs</span>
-        </div>
-        <div style={{ display:"flex",justifyContent:"space-between",paddingTop:10 }}>
-          <span style={{ fontWeight:800,fontSize:16 }}>Sub Total</span>
-          <span style={{ fontWeight:800,fontSize:18,color:"#FFA040" }}>{fmt$(sub)}</span>
-        </div>
+        <div style={{ display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1A2333" }}><span style={{ fontSize:13,color:"#6B7E96" }}>Time Logged</span><span style={{ fontSize:13,color:"#C2D3E8",fontWeight:600 }}>{hours.toFixed(2)} hrs</span></div>
+        <div style={{ display:"flex",justifyContent:"space-between",paddingTop:10 }}><span style={{ fontWeight:800,fontSize:16 }}>Sub Total</span><span style={{ fontWeight:800,fontSize:18,color:"#FFA040" }}>{fmt$(sub)}</span></div>
       </Card>
       <Btn onClick={onInvoice} color="#065F46">📄 Generate Invoice</Btn>
     </div>
@@ -595,8 +693,8 @@ function BillingTab({ wo, persist, showToast, onInvoice }) {
 
 function NotesTab({ wo, persist, showToast }) {
   const [note, setNote] = useState("");
-  const add = () => { if (!note.trim()) return; persist({ notes:[...(wo.notes||[]),{id:uid(),text:note.trim(),timestamp:Date.now()}] }); setNote(""); showToast("Note saved"); };
-  const remove = (id) => persist({ notes:(wo.notes||[]).filter(n=>n.id!==id) });
+  const add = async () => { if (!note.trim()) return; await persist({ notes:[...(wo.notes||[]),{id:uid(),text:note.trim(),timestamp:new Date().toISOString()}] }); setNote(""); showToast("Note saved"); };
+  const remove = async (id) => persist({ notes:(wo.notes||[]).filter(n=>n.id!==id) });
   return (
     <div>
       <TA label="Add a note" value={note} onChange={setNote} placeholder="Site conditions, client requests, follow-up items…" rows={4} />
@@ -615,23 +713,22 @@ function NotesTab({ wo, persist, showToast }) {
   );
 }
 
-function InvoiceView({ wo, settings, saveWO, update, setView, showToast }) {
-  const seq = settings.invoiceSeq + 1;
+function InvoiceView({ wo, settings, saveWO, saveSettings, setView, showToast }) {
+  const seq = (settings?.invoice_seq || 21) + 1;
   const invNum = "INV-" + new Date().getFullYear() + "-" + String(seq).padStart(3,"0");
-  const [invoiceNotes, setInvoiceNotes] = useState(wo.invoiceNotes || "");
-  const items = wo.lineItems || [];
+  const [invoiceNotes, setInvoiceNotes] = useState(wo.invoice_notes || "");
+  const items = wo.line_items || [];
   const sub = items.reduce((s,i)=>s+parseFloat(i.qty)*parseFloat(i.rate),0);
 
-  const markInvoiced = () => {
-    const updated = { ...wo, status: "Invoiced", invoiceNotes, updatedAt: Date.now() };
-    saveWO(updated);
-    update(s => ({ ...s, settings: { ...s.settings, invoiceSeq: seq } }));
+  const markInvoiced = async () => {
+    await saveWO({ ...wo, status: "Invoiced", invoice_notes: invoiceNotes });
+    await saveSettings({ ...settings, invoice_seq: seq });
     showToast("Marked as Invoiced · " + invNum);
     setView("list");
   };
 
   const printInvoice = () => {
-    const html = buildInvoiceHTML({ ...wo, invoiceNotes }, settings, invNum);
+    const html = buildInvoiceHTML({ ...wo, invoice_notes: invoiceNotes }, settings, invNum);
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
     else showToast("Allow popups then try again", "error");
@@ -644,213 +741,70 @@ function InvoiceView({ wo, settings, saveWO, update, setView, showToast }) {
         <div style={{ fontSize:18,fontWeight:800 }}>Invoice</div>
         <div style={{ marginLeft:"auto",fontSize:12,color:"#E86900",fontWeight:700 }}>{invNum}</div>
       </div>
-
       <Card><SL>INVOICE NOTES</SL>
-        <TA value={invoiceNotes} onChange={setInvoiceNotes} placeholder="Describe the work performed — appears on the invoice…" rows={4} />
+        <TA value={invoiceNotes} onChange={setInvoiceNotes} placeholder="Describe the work performed…" rows={4} />
       </Card>
-
       <div style={{ background:"#fff",borderRadius:14,overflow:"hidden",boxShadow:"0 4px 30px rgba(0,0,0,0.4)",marginBottom:16,color:"#222" }}>
         <div style={{ background:"#1a1a1a",height:10 }} />
         <div style={{ padding:"20px 18px" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18 }}>
-            <div>
-              <div style={{ fontSize:18,fontWeight:900,color:"#1a1a1a" }}>DESERT LINK</div>
-              <div style={{ fontSize:9,fontWeight:700,color:"#888",letterSpacing:3 }}>TECHNOLOGIES</div>
-              {settings.companyAddress && <div style={{ fontSize:10,color:"#888",marginTop:5 }}>{settings.companyAddress}</div>}
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:20,fontWeight:900,letterSpacing:2 }}>INVOICE</div>
-              <div style={{ width:40,height:3,background:"#E86900",marginTop:4,marginLeft:"auto" }} />
-              <div style={{ fontSize:11,color:"#666",marginTop:4 }}>{invNum}</div>
-            </div>
+            <div><div style={{ fontSize:18,fontWeight:900,color:"#1a1a1a" }}>DESERT LINK</div><div style={{ fontSize:9,fontWeight:700,color:"#888",letterSpacing:3 }}>TECHNOLOGIES</div>{settings?.company_address&&<div style={{ fontSize:10,color:"#888",marginTop:5 }}>{settings.company_address}</div>}</div>
+            <div style={{ textAlign:"right" }}><div style={{ fontSize:20,fontWeight:900,letterSpacing:2 }}>INVOICE</div><div style={{ width:40,height:3,background:"#E86900",marginTop:4,marginLeft:"auto" }} /><div style={{ fontSize:11,color:"#666",marginTop:4 }}>{invNum}</div></div>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14,fontSize:11 }}>
-            <div>
-              <div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:3 }}>CUSTOMER</div>
-              <div style={{ fontWeight:700 }}>{wo.clientName}</div>
-              {wo.clientAddress && <div style={{ color:"#555" }}>{wo.clientAddress}</div>}
-            </div>
-            <div>
-              {wo.customerPO && <div style={{ marginBottom:5 }}><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:2 }}>CUSTOMER PO</div><div style={{ fontWeight:700 }}>{wo.customerPO}</div></div>}
-              {wo.project && <div style={{ marginBottom:5 }}><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:2 }}>PROJECT</div><div style={{ fontWeight:700 }}>{wo.project}</div></div>}
-              <div><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:2 }}>INVOICE#</div><div style={{ fontWeight:700 }}>{invNum}</div></div>
-            </div>
+            <div><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:3 }}>CUSTOMER</div><div style={{ fontWeight:700 }}>{wo.client_name}</div>{wo.client_address&&<div style={{ color:"#555" }}>{wo.client_address}</div>}</div>
+            <div>{wo.customer_po&&<div style={{ marginBottom:5 }}><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:2 }}>CUSTOMER PO</div><div style={{ fontWeight:700 }}>{wo.customer_po}</div></div>}{wo.project&&<div style={{ marginBottom:5 }}><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:2 }}>PROJECT</div><div style={{ fontWeight:700 }}>{wo.project}</div></div>}</div>
           </div>
-          {wo.location && <div style={{ marginBottom:12,fontSize:11 }}><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:3 }}>SERVICE ADDRESS</div><div>{wo.location}</div></div>}
+          {wo.location&&<div style={{ marginBottom:12,fontSize:11 }}><div style={{ fontSize:9,fontWeight:800,color:"#888",letterSpacing:"0.12em",marginBottom:3 }}>SERVICE ADDRESS</div><div>{wo.location}</div></div>}
           <table style={{ width:"100%",borderCollapse:"collapse",marginBottom:0,fontSize:11 }}>
-            <thead><tr style={{ background:"#2a2a2a",color:"#fff" }}>
-              <th style={{ padding:"8px 10px",textAlign:"left" }}>Description</th>
-              <th style={{ padding:"8px 10px",textAlign:"center" }}>Qty</th>
-              <th style={{ padding:"8px 10px",textAlign:"right" }}>Price</th>
-              <th style={{ padding:"8px 10px",textAlign:"right",background:"#E86900" }}>Total</th>
-            </tr></thead>
+            <thead><tr style={{ background:"#2a2a2a",color:"#fff" }}><th style={{ padding:"8px 10px",textAlign:"left" }}>Description</th><th style={{ padding:"8px 10px",textAlign:"center" }}>Qty</th><th style={{ padding:"8px 10px",textAlign:"right" }}>Price</th><th style={{ padding:"8px 10px",textAlign:"right",background:"#E86900" }}>Total</th></tr></thead>
             <tbody>
-              {items.length===0 && <tr><td colSpan={4} style={{ padding:12,textAlign:"center",color:"#aaa" }}>No line items</td></tr>}
-              {items.map((item,i) => (
-                <tr key={item.id} style={{ background:i%2===0?"#fff":"#fafafa" }}>
-                  <td style={{ padding:"7px 10px" }}>{item.desc}</td>
-                  <td style={{ padding:"7px 10px",textAlign:"center",color:"#555" }}>{item.qty}</td>
-                  <td style={{ padding:"7px 10px",textAlign:"right",color:"#555" }}>{fmt$(item.rate)}</td>
-                  <td style={{ padding:"7px 10px",textAlign:"right",fontWeight:700,background:"#E8690015" }}>{fmt$(item.qty*item.rate)}</td>
-                </tr>
-              ))}
+              {items.length===0&&<tr><td colSpan={4} style={{ padding:12,textAlign:"center",color:"#aaa" }}>No line items</td></tr>}
+              {items.map((item,i)=><tr key={item.id} style={{ background:i%2===0?"#fff":"#fafafa" }}><td style={{ padding:"7px 10px" }}>{item.desc}</td><td style={{ padding:"7px 10px",textAlign:"center",color:"#555" }}>{item.qty}</td><td style={{ padding:"7px 10px",textAlign:"right",color:"#555" }}>{fmt$(item.rate)}</td><td style={{ padding:"7px 10px",textAlign:"right",fontWeight:700,background:"#E8690015" }}>{fmt$(item.qty*item.rate)}</td></tr>)}
             </tbody>
           </table>
-          <div style={{ display:"flex",justifyContent:"flex-end",marginBottom:12 }}>
-            <div style={{ background:"#2a2a2a",color:"#fff",padding:"8px 14px",fontWeight:800,fontSize:12 }}>Sub Total</div>
-            <div style={{ background:"#E86900",color:"#fff",padding:"8px 14px",fontWeight:800,fontSize:12,minWidth:70,textAlign:"right" }}>{fmt$(sub)}</div>
-          </div>
-          {invoiceNotes && (
-            <div style={{ background:"#f5f5f5",borderLeft:"3px solid #2a2a2a",padding:"10px 12px" }}>
-              <div style={{ fontSize:9,fontWeight:800,color:"#333",letterSpacing:"0.12em",marginBottom:5 }}>INVOICE NOTES</div>
-              <div style={{ fontSize:11,color:"#444",lineHeight:1.6 }}>{invoiceNotes}</div>
-            </div>
-          )}
+          <div style={{ display:"flex",justifyContent:"flex-end",marginBottom:12 }}><div style={{ background:"#2a2a2a",color:"#fff",padding:"8px 14px",fontWeight:800,fontSize:12 }}>Sub Total</div><div style={{ background:"#E86900",color:"#fff",padding:"8px 14px",fontWeight:800,fontSize:12,minWidth:70,textAlign:"right" }}>{fmt$(sub)}</div></div>
+          {invoiceNotes&&<div style={{ background:"#f5f5f5",borderLeft:"3px solid #2a2a2a",padding:"10px 12px" }}><div style={{ fontSize:9,fontWeight:800,color:"#333",letterSpacing:"0.12em",marginBottom:5 }}>INVOICE NOTES</div><div style={{ fontSize:11,color:"#444",lineHeight:1.6 }}>{invoiceNotes}</div></div>}
         </div>
         <div style={{ background:"#E86900",height:8 }} />
       </div>
-
       <Btn onClick={printInvoice} color="#1A6FC4">🖨 Print / Save as PDF</Btn>
       <Btn onClick={markInvoiced} color="#065F46">✓ Mark as Invoiced</Btn>
     </div>
   );
 }
 
-function SettingsView({ settings, saveSettings, setView, workOrders, update }) {
-  const [form, setForm] = useState({ ...settings, techs: [...settings.techs], workTypes: [...settings.workTypes] });
-  const [newTech, setNewTech] = useState("");
-  const [newType, setNewType] = useState("");
+function SettingsView({ settings, saveSettings, setView, session }) {
+  const [form, setForm] = useState({ ...settings });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const addTech = () => { if (!newTech.trim()) return; setForm(p => ({ ...p, techs: [...p.techs, newTech.trim()] })); setNewTech(""); };
-  const rmTech  = (t) => setForm(p => ({ ...p, techs: p.techs.filter(x => x !== t) }));
-  const addType = () => { if (!newType.trim()) return; setForm(p => ({ ...p, workTypes: [...p.workTypes, newType.trim()] })); setNewType(""); };
-  const rmType  = (t) => setForm(p => ({ ...p, workTypes: p.workTypes.filter(x => x !== t) }));
-
-  const exportData = () => {
-    try {
-      const data = JSON.stringify({ workOrders, settings: form }, null, 2);
-      const blob = new Blob([data], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "fieldops-backup.json"; a.click();
-      URL.revokeObjectURL(url);
-    } catch(e) { alert("Export failed: " + e.message); }
-  };
-
-  const importData = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (data.workOrders && data.settings) {
-          update(s => ({ ...s, workOrders: data.workOrders, settings: data.settings }));
-          setForm({ ...data.settings, techs: [...data.settings.techs], workTypes: [...data.settings.workTypes] });
-          alert("Import successful! " + data.workOrders.length + " work orders loaded.");
-        } else { alert("Invalid backup file."); }
-      } catch { alert("Could not read file."); }
-    };
-    reader.readAsText(file);
-  };
-
   return (
     <div>
       <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:20 }}>
         <button onClick={() => setView("dashboard")} style={{ background:"none",border:"none",color:"#4A8FC1",fontSize:22,cursor:"pointer" }}>←</button>
         <div style={{ fontSize:18,fontWeight:800 }}>Settings</div>
       </div>
+      <Card style={{ background:"#0B2444",border:"1px solid #1A3A5C" }}><SL>ACCOUNT</SL>
+        <div style={{ fontSize:13,color:"#C2D3E8",marginBottom:12 }}>Signed in as <b>{session.user.email}</b></div>
+        <div style={{ fontSize:11,color:"#4A5568",marginBottom:12 }}>Role: Admin · All data syncs via Supabase in real-time</div>
+      </Card>
       <Card><SL>COMPANY INFO</SL>
-        <F label="Company Name" value={form.companyName} onChange={v => set("companyName", v)} />
-        <F label="Address" value={form.companyAddress} onChange={v => set("companyAddress", v)} />
-        <F label="Phone" value={form.companyPhone} onChange={v => set("companyPhone", v)} type="tel" />
-        <F label="Email" value={form.companyEmail} onChange={v => set("companyEmail", v)} type="email" />
-        <F label="Last Invoice # (next will be +1)" value={String(form.invoiceSeq)} onChange={v => set("invoiceSeq", parseInt(v) || 0)} type="number" />
-        <Btn onClick={() => saveSettings(form)} color="#E86900">Save Company Info</Btn>
-      </Card>
-      <Card><SL>TECHNICIANS</SL>
-        {form.techs.map(t => (
-          <div key={t} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #1A2333" }}>
-            <span style={{ fontSize:14,color:"#C2D3E8" }}>{t}</span>
-            <button onClick={() => rmTech(t)} style={{ background:"none",border:"none",color:"#4A5568",cursor:"pointer",fontSize:22 }}>×</button>
-          </div>
-        ))}
-        <div style={{ display:"flex",gap:8,marginTop:10 }}>
-          <input value={newTech} onChange={e => setNewTech(e.target.value)} placeholder="Add technician" onKeyDown={e => e.key==="Enter" && addTech()} style={{ flex:1,...INP }} />
-          <button onClick={addTech} style={{ padding:"0 16px",background:"#E86900",border:"none",borderRadius:10,color:"#fff",fontWeight:800,cursor:"pointer" }}>+</button>
-        </div>
-        <div style={{ marginTop:10 }}><Btn onClick={() => saveSettings(form)} color="#E86900">Save Technicians</Btn></div>
-      </Card>
-      <Card><SL>WORK TYPES</SL>
-        {form.workTypes.map(t => (
-          <div key={t} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #1A2333" }}>
-            <span style={{ fontSize:13,color:"#C2D3E8" }}>{t}</span>
-            <button onClick={() => rmType(t)} style={{ background:"none",border:"none",color:"#4A5568",cursor:"pointer",fontSize:22 }}>×</button>
-          </div>
-        ))}
-        <div style={{ display:"flex",gap:8,marginTop:10 }}>
-          <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="Add work type" onKeyDown={e => e.key==="Enter" && addType()} style={{ flex:1,...INP }} />
-          <button onClick={addType} style={{ padding:"0 16px",background:"#E86900",border:"none",borderRadius:10,color:"#fff",fontWeight:800,cursor:"pointer" }}>+</button>
-        </div>
-        <div style={{ marginTop:10 }}><Btn onClick={() => saveSettings(form)} color="#E86900">Save Work Types</Btn></div>
-      </Card>
-      <Card style={{ background:"#0B1A2E",border:"1px solid #1A3A5C" }}><SL>BACKUP &amp; RESTORE</SL>
-        <div style={{ fontSize:12,color:"#6B7E96",marginBottom:12,lineHeight:1.6 }}>
-          {workOrders.length} work orders on this device. Export regularly as a backup.
-        </div>
-        <Ghost onClick={exportData}>📥 Export Backup (JSON)</Ghost>
-        <label style={{ display:"block",width:"100%",padding:12,background:"#1A2333",border:"1px solid #1E2D45",borderRadius:10,color:"#7EBCF5",fontWeight:700,fontSize:13,cursor:"pointer",marginBottom:10,textAlign:"center",boxSizing:"border-box" }}>
-          📤 Import Backup (JSON)
-          <input type="file" accept=".json" onChange={importData} style={{ display:"none" }} />
-        </label>
+        <F label="Company Name" value={form.company_name} onChange={v => set("company_name", v)} />
+        <F label="Address" value={form.company_address} onChange={v => set("company_address", v)} />
+        <F label="Phone" value={form.company_phone} onChange={v => set("company_phone", v)} type="tel" />
+        <F label="Email" value={form.company_email} onChange={v => set("company_email", v)} type="email" />
+        <F label="Last Invoice # (next will be +1)" value={String(form.invoice_seq || 21)} onChange={v => set("invoice_seq", parseInt(v) || 21)} type="number" />
+        <Btn onClick={() => saveSettings(form)} color="#E86900">Save Settings</Btn>
       </Card>
     </div>
   );
 }
 
-// Register service worker & generate icons
+// Register service worker
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(e => console.log("SW:", e));
-  });
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
 
-// Generate app icons via canvas and inject as link tags
-(function generateIcons() {
-  [192, 512].forEach(size => {
-    const canvas = document.createElement("canvas");
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext("2d");
-    // Background
-    ctx.fillStyle = "#0A0F1A";
-    ctx.fillRect(0, 0, size, size);
-    // Orange accent bar top
-    ctx.fillStyle = "#E86900";
-    ctx.fillRect(0, 0, size, size * 0.08);
-    // DL initials
-    ctx.fillStyle = "#E86900";
-    ctx.font = "bold " + Math.floor(size * 0.42) + "px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("DL", size / 2, size / 2 + size * 0.04);
-    // Bottom bar
-    ctx.fillStyle = "#E86900";
-    ctx.fillRect(0, size * 0.92, size, size * 0.08);
-    // Save as PNG
-    const img = canvas.toDataURL("image/png");
-    const link = document.createElement("link");
-    link.rel = "apple-touch-icon";
-    link.setAttribute("sizes", size + "x" + size);
-    link.href = img;
-    document.head.appendChild(link);
-    // Also save as named file reference in manifest
-    if (size === 192) {
-      document.querySelector('link[rel="apple-touch-icon"][href="icon-192.png"]') && 
-        document.querySelector('link[rel="apple-touch-icon"][href="icon-192.png"]').remove();
-    }
-  });
-})();
-
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(FieldOps));
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
   </script>
 </body>
 </html>
