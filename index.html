@@ -238,8 +238,12 @@ function AuthScreen() {
         </Card>
 
         <div style={{ textAlign: "center", fontSize: 13, color: "#4A5568" }}>
-          {mode === "login"  && <><span onClick={() => setMode("reset")} style={{ color: "#7EBCF5", cursor: "pointer" }}>Forgot password?</span></>}
-          {mode === "reset"  && <span onClick={() => setMode("login")}  style={{ color: "#7EBCF5", cursor: "pointer" }}>Back to sign in</span>}
+          {mode === "login"  && <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span onClick={() => setMode("signup")} style={{ color: "#E86900", cursor: "pointer", fontWeight: 700 }}>Create Account</span>
+            <span onClick={() => setMode("reset")}  style={{ color: "#7EBCF5", cursor: "pointer" }}>Forgot password?</span>
+          </div>}
+          {mode === "signup" && <div style={{ textAlign: "center" }}><span onClick={() => setMode("login")} style={{ color: "#7EBCF5", cursor: "pointer" }}>Already have an account? Sign in</span></div>}
+          {mode === "reset"  && <div style={{ textAlign: "center" }}><span onClick={() => setMode("login")} style={{ color: "#7EBCF5", cursor: "pointer" }}>Back to sign in</span></div>}
         </div>
       </div>
     </div>
